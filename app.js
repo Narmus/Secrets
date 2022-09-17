@@ -4,7 +4,8 @@ const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
 const app = express();
-const md5 = require("md5");
+const bcrypt = require("bcrypt");
+const saltRounds = Number(process.env.SALTROUNDS);
 app.use(express.static("public"));
 app.set("view engine", "ejs");
 app.use(
@@ -18,8 +19,9 @@ const userSchema = new mongoose.Schema({
   email: String,
   password: String,
 });
+
+//calling from .env file
 console.log(process.env.API_KEY);
-const secret = process.env.SECRET;
 
 const User = new mongoose.model("User", userSchema);
 
@@ -40,15 +42,20 @@ app.get("/logout", (req, res) => {
 
 // Register Page
 app.post("/register", (req, res) => {
-  const newUser = new User({
-    email: req.body.username,
-    password: md5(req.body.password),
-  });
-  newUser.save((err) => {
-    if (err) {
-      console.log(err);
-    } else {
-      res.render("secrets");
+  //bcrypt hashing
+  bcrypt.hash(req.body.password, saltRounds, (err, hash) => {
+    if (hash) {
+      const newUser = new User({
+        email: req.body.username,
+        password: hash,
+      });
+      newUser.save((err) => {
+        if (err) {
+          console.log(err);
+        } else {
+          res.render("secrets");
+        }
+      });
     }
   });
 });
@@ -56,18 +63,20 @@ app.post("/register", (req, res) => {
 // Login Page
 app.post("/login", (req, res) => {
   const username = req.body.username;
-  const password = md5(req.body.password);
+  const password = req.body.password;
 
   User.findOne({ email: username }, (err, foundUser) => {
     if (err) {
       console.log(err);
     } else {
       if (foundUser) {
-        if (foundUser.password === password) {
-          res.render("secrets");
-        } else {
-          res.render("login");
-        }
+        bcrypt.compare(password, foundUser.password, (err, result) => {
+          if (result === true) {
+            res.render("secrets");
+          } else {
+            res.render("login");
+          }
+        });
       } else {
         res.render("login");
       }
